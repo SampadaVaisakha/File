@@ -1,30 +1,35 @@
 import pandas as pd
+import nltk
+from nltk.corpus import words
 import re
 
-# Function to insert spaces correctly
-def insert_spaces(word):
-    # This regex pattern looks for capital letters and inserts spaces before each capital letter
-    return re.sub(r'([a-z])([A-Z])', r'\1 \2', word).title()
+# Download nltk words corpus (only needed once)
+nltk.download('words')
+english_words = set(words.words())  # Set for faster lookup
 
-# Function to process the Excel file
-def process_excel(input_file, output_file):
-    # Read the Excel file
-    df = pd.read_excel(input_file, engine='openpyxl')
-    
-    # Assuming the column with concatenated values is named 'ColumnA', you can change it if needed
-    if 'ColumnA' not in df.columns:
-        print("ColumnA not found in the Excel file.")
-        return
-    
-    # Apply the space-insertion function to the 'ColumnA'
-    df['ColumnB'] = df['ColumnA'].apply(insert_spaces)
-    
-    # Save the updated DataFrame to a new Excel file
-    df.to_excel(output_file, index=False, engine='openpyxl')
+# Read the Excel file
+df = pd.read_excel('your_file.xlsx')
 
-# Example usage
-input_file = 'input_file.xlsx'  # Replace with your actual file path
-output_file = 'output_file.xlsx'  # The file to save the results
-process_excel(input_file, output_file)
+# Function to split based on dictionary words
+def split_using_dict(value):
+    result = ""
+    temp_word = ""
 
-print("Processing complete! Results saved to:", output_file)
+    for char in value:
+        temp_word += char
+        # If the temp_word is valid, add it to the result
+        if temp_word.lower() in english_words or temp_word in ['O2']:
+            result += temp_word + " "
+            temp_word = ""
+
+    # Add remaining part if not already processed
+    if temp_word:
+        result += temp_word
+    
+    return result.strip()
+
+# Apply the function to the column you want to format
+df['formatted_column'] = df['your_column_name'].apply(lambda x: split_using_dict(x) if isinstance(x, str) else x)
+
+# Save the updated dataframe to a new Excel file
+df.to_excel('formatted_file.xlsx', index=False)

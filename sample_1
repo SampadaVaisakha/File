@@ -5,27 +5,33 @@ import re
 
 # Download nltk words corpus (only needed once)
 nltk.download('words')
-english_words = set(words.words())  # Set for faster lookup
+english_words = set(words.words())  # Set of valid English words for lookup
+
+# Add custom words (like medical or industry-specific terms)
+custom_words = {'O2', 'APG', 'CLIA'}  # Customize this list
+english_words.update(custom_words)
 
 # Read the Excel file
 df = pd.read_excel('your_file.xlsx')
 
-# Function to split based on dictionary words
+# Function to split concatenated uppercase words intelligently
 def split_using_dict(value):
     result = ""
     temp_word = ""
+    i = 0
 
-    for char in value:
-        temp_word += char
-        # If the temp_word is valid, add it to the result
-        if temp_word.lower() in english_words or temp_word in ['O2']:
+    while i < len(value):
+        temp_word += value[i]
+        # If the current temp_word is a valid English word, add to result
+        if temp_word.lower() in english_words or temp_word in custom_words:
             result += temp_word + " "
             temp_word = ""
+        i += 1
 
-    # Add remaining part if not already processed
+    # Add remaining characters (if any) to result
     if temp_word:
         result += temp_word
-    
+
     return result.strip()
 
 # Apply the function to the column you want to format

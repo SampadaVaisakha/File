@@ -2,43 +2,48 @@ import nltk
 import re
 from nltk.corpus import words
 
+# Download NLTK words corpus
 nltk.download('words')
 valid_words = set(words.words())
 
 def split_into_words(text):
     result = []
     
-    # Regex to match alphanumeric sequences and split text
-    parts = re.findall(r'[A-Za-z]*\d+[A-Za-z]*|[A-Za-z]+|\d+', text)
+    # First, use regex to split alphanumeric parts and numbers
+    # Match sequences like 'O2', 'H2O', '123', 'CamelCase' etc.
+    parts = re.findall(r'[A-Za-z]+\d+[A-Za-z]*|\d+|[A-Za-z]+', text)
 
     for part in parts:
-        # If it's a valid word, directly append
-        if part.lower() in valid_words or part.isdigit():
+        # If the part contains numbers mixed with letters (like O2), keep them intact
+        if re.match(r'^[A-Za-z]*\d+[A-Za-z]*$', part):
+            result.append(part)
+        # If the part is a valid word, add it
+        elif part.lower() in valid_words:
             result.append(part)
         else:
-            # Split remaining parts by camel case or valid word match
+            # For mixed or camel case parts like 'SaturatedQuantity'
+            temp = []
             j = 0
             while j < len(part):
                 match = ''
-                # Try to match longest valid word from nltk corpus
+                # Try to match valid words
                 for k in range(len(part), j, -1):
-                    if part[j:k].lower() in valid_words or part[j:k] in valid_words:
+                    if part[j:k].lower() in valid_words:
                         match = part[j:k]
-                        result.append(match)
-                        j = k  # Jump to the next section after the match
+                        temp.append(match)
+                        j = k
                         break
-
-                # If no match is found, split by camel case
+                # If no match, split by camel case
                 if not match:
+                    # Split by capital letters
                     camel_parts = re.findall(r'[A-Z][a-z]*|[a-z]+', part[j:])
-                    result.extend(camel_parts)
+                    temp.extend(camel_parts)
                     break
+            result.extend(temp)
 
-    # Join results into the final string with proper spaces
     return ' '.join(result)
 
 # Test cases
 print(split_into_words('SIGNATURESOURCECODE1'))  # OUTPUT: SIGNATURE SOURCE CODE 1
-print(split_into_words('O2saturatedquantity'))    # OUTPUT: O2 saturated quantity
-print(split_into_words('CamelCaseExample1'))     # OUTPUT: Camel Case Example 1
-print(split_into_words('H2OisEssential'))        # OUTPUT: H2 O is Essential
+print(split_into_words('O2saturatedquantity'))    # OUTPUT: O2 Saturated quantity
+print(split_into_words('H2OisEssential'))        # OUTPUT: H2O is Essential

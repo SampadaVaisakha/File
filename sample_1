@@ -1,41 +1,22 @@
-import pandas as pd
-import nltk
-from nltk.corpus import words
 import re
 
-# Download nltk words corpus (only needed once)
-nltk.download('words')
-english_words = set(words.words())  # Set of valid English words for lookup
+def format_strings(input_list):
+    output_list = []
+    for item in input_list:
+        formatted = re.sub(r'([A-Z])([A-Z][a-z])', r'\1 \2', item)
+        formatted = re.sub(r'([a-z])([A-Z])', r'\1 \2', formatted)
+        formatted = re.sub(r'(\d+)', r' \1', formatted)
+        output_list.append(formatted)
+    return output_list
 
-# Add custom words (like medical or industry-specific terms)
-custom_words = {'O2', 'APG', 'CLIA'}  # Customize this list
-english_words.update(custom_words)
+# Example usage
+input_values = [
+    "DEMONSTRATIONPROJECTIDENTIFIER",
+    "DIAGNOSISTYPECODE1",
+    "O2SATURATEDQUALITY",
+    "CONDITIONRESPONSECODE"
+]
 
-# Read the Excel file
-df = pd.read_excel('your_file.xlsx')
-
-# Function to split concatenated uppercase words intelligently
-def split_using_dict(value):
-    result = ""
-    temp_word = ""
-    i = 0
-
-    while i < len(value):
-        temp_word += value[i]
-        # If the current temp_word is a valid English word, add to result
-        if temp_word.lower() in english_words or temp_word in custom_words:
-            result += temp_word + " "
-            temp_word = ""
-        i += 1
-
-    # Add remaining characters (if any) to result
-    if temp_word:
-        result += temp_word
-
-    return result.strip()
-
-# Apply the function to the column you want to format
-df['formatted_column'] = df['your_column_name'].apply(lambda x: split_using_dict(x) if isinstance(x, str) else x)
-
-# Save the updated dataframe to a new Excel file
-df.to_excel('formatted_file.xlsx', index=False)
+output_values = format_strings(input_values)
+for output in output_values:
+    print(output)

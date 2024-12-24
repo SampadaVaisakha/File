@@ -9,39 +9,27 @@ from nltk.corpus import words
 words_1st = set(words.words())
 
 def split_into_words(text):
-    # Handle camel case split (lowercase followed by uppercase letters)
-    text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
-
-    # Convert to lowercase for easier processing
-    text = text.lower()
-
-    # Initialize result list
     result = []
     n = len(text)
     i = 0
 
     while i < n:
-        found = False
-        # Try to find the longest word in the text that is in the words_1st set
-        for j in range(n, 1, -1):
-            if text[i:i+j] in words_1st:
-                result.append(text[i:i+j].capitalize())  # Capitalize and add to result
-                i += j  # Move the index forward by the length of the found word
-                found = True
+        current_word = ""
+        # Start adding characters one by one and check if the current combination is a valid word
+        for j in range(i, n):
+            current_word += text[j]
+            # Check if the current combination is a valid word in the corpus
+            if current_word.lower() in words_1st:
+                result.append(current_word.capitalize())  # Add the valid word (capitalized)
+                i = j + 1  # Move index forward to the next character after the found word
                 break
-        
-        if not found:
-            # If no word is found, just append the next character
+        else:
+            # If no valid word is found, append the current character as a whole word
             result.append(text[i].upper())  # Capitalize the current character
-            i += 1
+            i += 1  # Move to the next character
 
-    # Join the result into a final string
-    result_str = ' '.join(result)
-
-    # Final formatting to ensure numbers and letters stay together (e.g., H2O stays as H2O)
-    result_str = re.sub(r'(\d)([A-Za-z])', r'\1\2', result_str)  # Keep H2O as H2O, no space
-
-    return result_str
+    # Final result formatted as a string
+    return ' '.join(result)
 
 # Test cases
 print(split_into_words('SIGNATURESOURCECODE1'))  # Expected: SIGNATURE SOURCE CODE 1

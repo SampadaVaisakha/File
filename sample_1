@@ -9,12 +9,14 @@ valid_words = set(words.words())
 def split_into_words(text):
     result = []
     
-    # First, use regex to split alphanumeric parts and numbers
-    # Match sequences like 'O2', 'H2O', '123', 'CamelCase' etc.
+    # Regex pattern to match:
+    # 1. Alphanumeric combinations (e.g., O2, H2O)
+    # 2. Pure words (e.g., Hello, World)
+    # 3. Pure numbers (e.g., 123)
     parts = re.findall(r'[A-Za-z]+\d+[A-Za-z]*|\d+|[A-Za-z]+', text)
-
+    
     for part in parts:
-        # If the part contains numbers mixed with letters (like O2), keep them intact
+        # If the part contains alphanumeric combinations like O2, H2O, keep it intact
         if re.match(r'^[A-Za-z]*\d+[A-Za-z]*$', part):
             result.append(part)
         # If the part is a valid word, add it
@@ -26,7 +28,7 @@ def split_into_words(text):
             j = 0
             while j < len(part):
                 match = ''
-                # Try to match valid words
+                # Try to match valid words from the NLTK corpus
                 for k in range(len(part), j, -1):
                     if part[j:k].lower() in valid_words:
                         match = part[j:k]
@@ -35,15 +37,18 @@ def split_into_words(text):
                         break
                 # If no match, split by camel case
                 if not match:
-                    # Split by capital letters
+                    # Split by capital letters for camel case (e.g., SaturatedQuantity -> Saturated Quantity)
                     camel_parts = re.findall(r'[A-Z][a-z]*|[a-z]+', part[j:])
                     temp.extend(camel_parts)
                     break
             result.extend(temp)
-
+    
+    # Join results into the final string with spaces
     return ' '.join(result)
 
 # Test cases
-print(split_into_words('SIGNATURESOURCECODE1'))  # OUTPUT: SIGNATURE SOURCE CODE 1
-print(split_into_words('O2saturatedquantity'))    # OUTPUT: O2 Saturated quantity
-print(split_into_words('H2OisEssential'))        # OUTPUT: H2O is Essential
+print(split_into_words('SIGNATURESOURCECODE1'))  # Expected: SIGNATURE SOURCE CODE 1
+print(split_into_words('O2saturatedquantity'))    # Expected: O2 Saturated quantity
+print(split_into_words('H2OisEssential'))        # Expected: H2O is Essential
+print(split_into_words('CamelCaseExample1'))     # Expected: Camel Case Example 1
+print(split_into_words('H2OWaterIsGreat'))       # Expected: H2O Water Is Great

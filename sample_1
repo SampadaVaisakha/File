@@ -3,51 +3,58 @@ import nltk
 import re
 from nltk.corpus import words
 
-# Download the nltk words corpus if not already
+# Download nltk corpus if not already downloaded
 nltk.download('words')
 
-# Load the list of valid English words
+# Load English words from nltk corpus
 valid_words = set(words.words())
 
-# Read the Excel file
+# Read Excel file
 file_path = 'path_to_your_excel_file.xlsx'
 df = pd.read_excel(file_path)
 
-# Function to split words and handle numbers
+# Function to split words and handle alphanumeric cases
 def split_into_words(text):
-    # Separate trailing digits
-    match = re.match(r'([a-zA-Z]+)(\d*)$', text)
-    text_part = match.group(1)
-    number_part = match.group(2)
-    
     result = []
     i = 0
-    
-    while i < len(text_part):
-        match = ''
-        # Try longest possible match from current position
-        for j in range(len(text_part), i, -1):
-            if text_part[i:j] in valid_words:
-                match = text_part[i:j]
-                result.append(match)
-                i = j  # Move index to after the matched part
-                break
-        
-        # If no match, accumulate characters and continue
-        if not match:
-            result.append(text_part[i])
-            i += 1
 
-    # Add the number part if it exists
-    if number_part:
-        result.append(number_part)
+    # Regex to separate numbers and letters (e.g., O2saturatedquantity -> ['O', '2', 'saturated', 'quantity'])
+    parts = re.findall(r'[A-Za-z]+|\d+', text)
+    
+    for part in parts:
+        # If the part is purely numeric, keep it as is
+        if part.isdigit():
+            result.append(part)
+            continue
+        
+        # Greedy match for longest word in the alphabetic part
+        temp = ''
+        j = 0
+        while j < len(part):
+            match = ''
+            # Try longest match from the current position
+            for k in range(len(part), j, -1):
+                if part[j:k] in valid_words:
+                    match = part[j:k]
+                    result.append(match)
+                    j = k  # Move to the next section after the match
+                    break
+            
+            # If no match is found, keep accumulating characters
+            if not match:
+                temp += part[j]
+                j += 1
+
+        # Add remaining unmatched characters (to avoid single-character splitting)
+        if temp:
+            result.append(temp)
     
     return ' '.join(result)
 
-# Apply the function to the 'values' column
+# Apply function to the 'values' column
 df['split_words'] = df['values'].apply(lambda x: split_into_words(x.lower()))
 
-# Save the updated dataframe to a new Excel file
+# Save the updated DataFrame to a new Excel file
 df.to_excel('output_split_words.xlsx', index=False)
 
 print("Splitting complete. Check 'output_split_words.xlsx'.")

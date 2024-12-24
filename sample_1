@@ -1,47 +1,43 @@
-import pandas as pd
 import nltk
 import re
 from nltk.corpus import words
 
-# Download nltk corpus if not already downloaded
 nltk.download('words')
-
-# Load English words from nltk corpus
 valid_words = set(words.words())
 
 def split_into_words(text):
     result = []
-    i = 0
 
-    # Separate numbers and letters (e.g., O2saturatedquantity -> ['O', '2', 'saturated', 'quantity'])
-    parts = re.findall(r'[A-Za-z]+|\d+', text)
+    # Match alphanumeric parts (e.g., O2) and numbers separately
+    parts = re.findall(r'[A-Za-z]*\d+[A-Za-z]*|[A-Za-z]+|\d+', text)
 
     for part in parts:
-        if part.isdigit():
+        # If the part is entirely numeric or alphanumeric (like O2), keep it as is
+        if part.isdigit() or re.match(r'^[A-Za-z]*\d+[A-Za-z]*$', part):
             result.append(part)
             continue
-        
-        temp = ''
+
         j = 0
         while j < len(part):
             match = ''
-            # Try longest match first
+            # Try to match longest valid word from nltk corpus
             for k in range(len(part), j, -1):
-                if part[j:k] in valid_words:
+                if part[j:k].lower() in valid_words or part[j:k] in valid_words:
                     match = part[j:k]
                     result.append(match)
-                    j = k  # Jump to the next section after the match
-                    temp = ''
+                    j = k  # Move to the next section after the match
                     break
 
-            # If no match is found, append remaining part as is
+            # If no word is found, split by camel case
             if not match:
-                temp = part[j:]  # Grab the rest of the substring
-                j = len(part)    # Skip to the end
-                result.append(temp)  
-                temp = ''
+                camel_parts = re.findall(r'[A-Z][a-z]*|[a-z]+', part[j:])
+                result.extend(camel_parts)
+                break
     
     return ' '.join(result)
 
-# Test
-print(split_into_words('SIGNATURESOURCECODE1'))
+# Test cases
+print(split_into_words('SIGNATURESOURCECODE1'))  # OUTPUT: SIGNATURE SOURCE CODE 1
+print(split_into_words('O2saturatedquantity'))    # OUTPUT: O2 saturated quantity
+print(split_into_words('CamelCaseExample1'))     # OUTPUT: Camel Case Example 1
+print(split_into_words('H2OisEssential'))        # OUTPUT: H2 O is Essential

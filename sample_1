@@ -1,12 +1,22 @@
 import re
+import nltk
+from nltk.corpus import words
+nltk.download('words')
 
 def format_strings(input_list):
+    word_list = set(words.words())
     output_list = []
+    
     for item in input_list:
-        formatted = re.sub(r'([A-Z])([A-Z][a-z])', r'\1 \2', item)
-        formatted = re.sub(r'([a-z])([A-Z])', r'\1 \2', formatted)
-        formatted = re.sub(r'(\d+)', r' \1', formatted)
-        output_list.append(formatted)
+        start = 0
+        formatted = ""
+        
+        for end in range(1, len(item) + 1):
+            if item[start:end] in word_list or end == len(item):
+                formatted += item[start:end] + " "
+                start = end
+        
+        output_list.append(formatted.strip())
     return output_list
 
 # Example usage

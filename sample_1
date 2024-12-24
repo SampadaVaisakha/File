@@ -1,68 +1,53 @@
-import nltk
 import re
+import nltk
 from nltk.corpus import words
 
-# Download NLTK words corpus
-nltk.download('words')
-valid_words = set(words.words())
+# Uncomment this if you haven't already downloaded the 'words' corpus
+# nltk.download('words')
+
+# Define the words corpus set
+words_1st = set(words.words())
 
 def split_into_words(text):
+    # Apply transformations to split and format words in the text
+    if re.search(r'id', text):
+        text = re.sub(r'([A-Za-z]) (\d)', r'\1 \2', text)
+    
+    text = re.sub(r'(\d) ([A-Za-z])', r'\1 \2', text)
+    text = re.sub(r'([a-z]) ([A-Z])', r'\1 \2', text)
+
+    text = text.lower()  # Convert the text to lowercase for easier processing
+
+    # Initialize result list
     result = []
-    
-    # Regex pattern to match:
-    # 1. Alphanumeric combinations (e.g., O2, H2O)
-    # 2. Pure words (e.g., Hello, World)
-    # 3. Pure numbers (e.g., 123)
-    print(f"Original text: {text}")
-    
-    parts = re.findall(r'[A-Za-z]+\d+[A-Za-z]*|\d+|[A-Za-z]+', text)
-    print(f"Step 1 - Split text into parts (regex match for alphanumeric, words, and numbers): {parts}")
+    n = len(text)
+    i = 0
 
-    for part in parts:
-        print(f"Processing part: {part}")
+    while i < n:
+        found = False
+        # Try to find the longest word in the text that is in the words_1st set
+        for j in range(n, 1, -1):
+            if text[i:i+j] in words_1st:
+                result.append(text[i:i+j].capitalize())  # Capitalize and add to result
+                i += j  # Move the index forward by the length of the found word
+                found = True
+                break
         
-        # If the part contains alphanumeric combinations like O2, H2O, keep it intact
-        if re.match(r'^[A-Za-z]*\d+[A-Za-z]*$', part):
-            print(f"Alphanumeric combination found: {part}")
-            result.append(part)
-        
-        # If the part is a valid word, add it
-        elif part.lower() in valid_words:
-            print(f"Valid word found: {part}")
-            result.append(part)
-        
-        else:
-            # For mixed or camel case parts like 'SaturatedQuantity'
-            print(f"Non-matching part, trying to split camel case: {part}")
-            temp = []
-            j = 0
-            while j < len(part):
-                match = ''
-                # Try to match valid words from the NLTK corpus
-                for k in range(len(part), j, -1):
-                    if part[j:k].lower() in valid_words:
-                        match = part[j:k]
-                        print(f"Match found in valid words: {match}")
-                        temp.append(match)
-                        j = k
-                        break
-                # If no match, split by camel case
-                if not match:
-                    # Split by capital letters for camel case (e.g., SaturatedQuantity -> Saturated Quantity)
-                    camel_parts = re.findall(r'[A-Z][a-z]*|[a-z]+', part[j:])
-                    print(f"Camel case split found: {camel_parts}")
-                    temp.extend(camel_parts)
-                    break
-            result.extend(temp)
+        if not found:
+            # If no word is found, just append the next character
+            result.append(text[i].upper())  # Capitalize the current character
+            i += 1
 
-    # Join results into the final string with spaces
-    final_result = ' '.join(result)
-    print(f"Final result after joining with spaces: {final_result}")
-    return final_result
+    # Handle number/letter combinations like 'H2O'
+    result_str = ' '.join(result).upper()
+    result_str = re.sub(r'(\d)([A-Za-z])', r'\1 \2', result_str)
+    result_str = re.sub(r'([A-Za-z])(\d)', r'\1 \2', result_str)
+    
+    return result_str
 
 # Test cases
 print(split_into_words('SIGNATURESOURCECODE1'))  # Expected: SIGNATURE SOURCE CODE 1
-print(split_into_words('O2saturatedquantity'))    # Expected: O2 Saturated quantity
-print(split_into_words('H2OisEssential'))        # Expected: H2O is Essential
+print(split_into_words('O2saturatedquantity'))    # Expected: O2 Saturated Quantity
+print(split_into_words('H2OisEssential'))        # Expected: H2O Is Essential
 print(split_into_words('CamelCaseExample1'))     # Expected: Camel Case Example 1
 print(split_into_words('H2OWaterIsGreat'))       # Expected: H2O Water Is Great

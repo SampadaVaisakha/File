@@ -13,17 +13,27 @@ def split_into_words(text):
     # 1. Alphanumeric combinations (e.g., O2, H2O)
     # 2. Pure words (e.g., Hello, World)
     # 3. Pure numbers (e.g., 123)
-    parts = re.findall(r'[A-Za-z]+\d+[A-Za-z]*|\d+|[A-Za-z]+', text)
+    print(f"Original text: {text}")
     
+    parts = re.findall(r'[A-Za-z]+\d+[A-Za-z]*|\d+|[A-Za-z]+', text)
+    print(f"Step 1 - Split text into parts (regex match for alphanumeric, words, and numbers): {parts}")
+
     for part in parts:
+        print(f"Processing part: {part}")
+        
         # If the part contains alphanumeric combinations like O2, H2O, keep it intact
         if re.match(r'^[A-Za-z]*\d+[A-Za-z]*$', part):
+            print(f"Alphanumeric combination found: {part}")
             result.append(part)
+        
         # If the part is a valid word, add it
         elif part.lower() in valid_words:
+            print(f"Valid word found: {part}")
             result.append(part)
+        
         else:
             # For mixed or camel case parts like 'SaturatedQuantity'
+            print(f"Non-matching part, trying to split camel case: {part}")
             temp = []
             j = 0
             while j < len(part):
@@ -32,6 +42,7 @@ def split_into_words(text):
                 for k in range(len(part), j, -1):
                     if part[j:k].lower() in valid_words:
                         match = part[j:k]
+                        print(f"Match found in valid words: {match}")
                         temp.append(match)
                         j = k
                         break
@@ -39,12 +50,15 @@ def split_into_words(text):
                 if not match:
                     # Split by capital letters for camel case (e.g., SaturatedQuantity -> Saturated Quantity)
                     camel_parts = re.findall(r'[A-Z][a-z]*|[a-z]+', part[j:])
+                    print(f"Camel case split found: {camel_parts}")
                     temp.extend(camel_parts)
                     break
             result.extend(temp)
-    
+
     # Join results into the final string with spaces
-    return ' '.join(result)
+    final_result = ' '.join(result)
+    print(f"Final result after joining with spaces: {final_result}")
+    return final_result
 
 # Test cases
 print(split_into_words('SIGNATURESOURCECODE1'))  # Expected: SIGNATURE SOURCE CODE 1

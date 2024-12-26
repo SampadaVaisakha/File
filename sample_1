@@ -1,39 +1,91 @@
-import re
+import pandas as pd
 import nltk
+from wordsegment import load, segment
+import re
+
+# Load the wordsegment model
+load()
+
+# Download necessary NLTK resources
+nltk.download('words')
 from nltk.corpus import words
 
-# Uncomment this if you haven't already downloaded the 'words' corpus
-# nltk.download('words')
+# Dynamic word corpus using NLTK's words corpus
+words_lst = set(words.words())  # Set of words from NLTK
+custom_known_words = set()
 
-# Define the words corpus set
-words_1st = set(words.words())
+# Function to split combined words dynamically
+def split_combined(text):
+    # Case 1: If underscore exists, don't split
+    if '_' in text:
+        return text
+    
+    # Case 2: Use wordsegment to split camel case or concatenated words
+    segmented = segment(text)
+    if len(segmented) > 1:
+        return ' '.join(segmented).upper()  # Convert to uppercase
+    
+    # Case 3: Handle words that might not be in the corpus but should stay together
+    text = handle_dynamic_split(text)
+    
+    return split_words(text)
 
-def split_into_words(text):
+# Function to handle dynamic word splitting
+def handle_dynamic_split(text):
+    # Add to corpus if not found
+    if text.lower() not in words_lst:
+        words_lst.add(text.lower())  # Dynamically add new word to corpus
+    
+    # Handle potential phrase patterns dynamically
+    return text
+
+def split_words(text):
+    # Split mixed letters and numbers into separate words
+    if re.search(r'\d[A-Za-z]', text):
+        text = re.sub(r'(\d)([A-Z])', r'\1 \2', text)
+    
     result = []
-    n = len(text)
-    i = 0
-
-    while i < n:
-        current_word = ""
-        # Start adding characters one by one and check if the current combination is a valid word
-        for j in range(i, n):
-            current_word += text[j]
-            # Check if the current combination is a valid word in the corpus
-            if current_word.lower() in words_1st:
-                result.append(current_word.capitalize())  # Add the valid word (capitalized)
-                i = j + 1  # Move index forward to the next character after the found word
-                break
+    for word in text.split():
+        # Handle unknown words by checking with corpus
+        if word.isalpha() and word.lower() not in words_lst:
+            split_word = split_into_valid_words(word)
+            result.extend(split_word)
         else:
-            # If no valid word is found, append the current character as a whole word
-            result.append(text[i].upper())  # Capitalize the current character
-            i += 1  # Move to the next character
+            result.append(word)
+    
+    return " ".join(result)
 
-    # Final result formatted as a string
-    return ' '.join(result)
+def split_into_valid_words(word):
+    # Dynamically split words into smaller valid words
+    if word.lower() not in words_lst:
+        words_lst.add(word.lower())  # Add new word to the corpus
 
-# Test cases
-print(split_into_words('SIGNATURESOURCECODE1'))  # Expected: SIGNATURE SOURCE CODE 1
-print(split_into_words('O2saturatedquantity'))    # Expected: O2 Saturated Quantity
-print(split_into_words('H2OisEssential'))        # Expected: H2O Is Essential
-print(split_into_words('CamelCaseExample1'))     # Expected: Camel Case Example 1
-print(split_into_words('H2OWaterIsGreat'))       # Expected: H2O Water Is Great
+    # Try splitting word into known smaller words
+    for i in range(1, len(word)):
+        first_part = word[:i]
+        second_part = word[i:]
+        if first_part.lower() in words_lst and second_part.lower() in words_lst:
+            return [first_part, second_part]
+    
+    return [word]  # Return the original word if no split is found
+
+# Process each entry in the input column dynamically
+def process_and_learn(text):
+    # Use dynamic segmentation to process each input
+    processed_text = split_combined(text)
+    
+    # Dynamically learn new words by splitting and adding them to the corpus
+    for word in processed_text.split():
+        if word.isalpha():
+            split_into_valid_words(word)
+    
+    return processed_text
+
+# Example DataFrame, assuming it has a column 'input_column'
+df = pd.read_excel(r"C:\Users\tejas\Downloads\sample.xlsx")
+
+# Apply the dynamic processing to each entry in the 'input_column'
+df['Processed'] = df['input_column'].apply(lambda x: process_and_learn(x))
+
+# Output the processed data to verify
+df.head(50)

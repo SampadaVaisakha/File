@@ -1,91 +1,43 @@
 import pandas as pd
 import nltk
 from wordsegment import load, segment
-import re
-
-# Load the wordsegment model
-load()
-
-# Download necessary NLTK resources
-nltk.download('words')
 from nltk.corpus import words
 
-# Dynamic word corpus using NLTK's words corpus
-words_lst = set(words.words())  # Set of words from NLTK
-custom_known_words = set()
+nltk.download('words')
+load()
 
-# Function to split combined words dynamically
+words_lst = set(words.words())
+custom_known_words = {'savings', 'purchased', 'ind', 'terms', 'dates','user'}
+words_lst.update(custom_known_words)
+
+def further_split(word):
+    if word.lower() in words_lst:
+        return word
+
+    for i in range(1, len(word)):
+        part1, part2 = word[:i], word[i:]
+        if part1.lower() in words_lst and part2.lower() in words_lst:
+            return f'{part1} {part2}'
+    
+    return word
+
 def split_combined(text):
-    # Case 1: If underscore exists, don't split
     if '_' in text:
         return text
     
-    # Case 2: Use wordsegment to split camel case or concatenated words
     segmented = segment(text)
-    if len(segmented) > 1:
-        return ' '.join(segmented).upper()  # Convert to uppercase
+    refined_segment = [further_split(word) for word in segmented]
     
-    # Case 3: Handle words that might not be in the corpus but should stay together
-    text = handle_dynamic_split(text)
-    
-    return split_words(text)
+    return ' '.join(refined_segment).upper()
 
-# Function to handle dynamic word splitting
-def handle_dynamic_split(text):
-    # Add to corpus if not found
-    if text.lower() not in words_lst:
-        words_lst.add(text.lower())  # Dynamically add new word to corpus
-    
-    # Handle potential phrase patterns dynamically
-    return text
-
-def split_words(text):
-    # Split mixed letters and numbers into separate words
-    if re.search(r'\d[A-Za-z]', text):
-        text = re.sub(r'(\d)([A-Z])', r'\1 \2', text)
-    
-    result = []
-    for word in text.split():
-        # Handle unknown words by checking with corpus
-        if word.isalpha() and word.lower() not in words_lst:
-            split_word = split_into_valid_words(word)
-            result.extend(split_word)
-        else:
-            result.append(word)
-    
-    return " ".join(result)
-
-def split_into_valid_words(word):
-    # Dynamically split words into smaller valid words
-    if word.lower() not in words_lst:
-        words_lst.add(word.lower())  # Add new word to the corpus
-
-    # Try splitting word into known smaller words
-    for i in range(1, len(word)):
-        first_part = word[:i]
-        second_part = word[i:]
-        if first_part.lower() in words_lst and second_part.lower() in words_lst:
-            return [first_part, second_part]
-    
-    return [word]  # Return the original word if no split is found
-
-# Process each entry in the input column dynamically
 def process_and_learn(text):
-    # Use dynamic segmentation to process each input
     processed_text = split_combined(text)
-    
-    # Dynamically learn new words by splitting and adding them to the corpus
     for word in processed_text.split():
-        if word.isalpha():
-            split_into_valid_words(word)
-    
+        if word.lower() not in words_lst:
+            words_lst.add(word.lower())
     return processed_text
 
-# Example DataFrame, assuming it has a column 'input_column'
 df = pd.read_excel(r"C:\Users\tejas\Downloads\sample.xlsx")
+df.insert(1, 'Processed', df['input_column'].apply(lambda x: process_and_learn(x)))
 
-# Apply the dynamic processing to each entry in the 'input_column'
-df['Processed'] = df['input_column'].apply(lambda x: process_and_learn(x))
-
-# Output the processed data to verify
-df.head(50)
+df.tail(60)

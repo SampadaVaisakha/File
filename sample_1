@@ -1,43 +1,22 @@
-import pandas as pd
-import nltk
-from wordsegment import load, segment
-from nltk.corpus import words
+from difflib import SequenceMatcher
 
-nltk.download('words')
-load()
+def fuzzy_match(a, b, threshold=0.8):
+    return SequenceMatcher(None, a, b).ratio() >= threshold
 
-words_lst = set(words.words())
-custom_known_words = {'savings', 'purchased', 'ind', 'terms', 'dates','user'}
-words_lst.update(custom_known_words)
+def is_match(full_term, shortcut):
+    full_term = full_term.lower().replace(" ", "_")
+    shortcut = shortcut.lower()
+    shortcut_parts = shortcut.split('_')
+    full_term_parts = full_term.split('_')
 
-def further_split(word):
-    if word.lower() in words_lst:
-        return word
+    suffix_to_check = shortcut_parts[-len(full_term_parts):]
+    if all(fuzzy_match(a, b) for a, b in zip(full_term_parts, suffix_to_check)):
+        return True
 
-    for i in range(1, len(word)):
-        part1, part2 = word[:i], word[i:]
-        if part1.lower() in words_lst and part2.lower() in words_lst:
-            return f'{part1} {part2}'
+    for ft_part in full_term_parts:
+        if any(fuzzy_match(ft_part, sc_part) for sc_part in shortcut_parts):
+            return True
     
-    return word
+    return False
 
-def split_combined(text):
-    if '_' in text:
-        return text
-    
-    segmented = segment(text)
-    refined_segment = [further_split(word) for word in segmented]
-    
-    return ' '.join(refined_segment).upper()
-
-def process_and_learn(text):
-    processed_text = split_combined(text)
-    for word in processed_text.split():
-        if word.lower() not in words_lst:
-            words_lst.add(word.lower())
-    return processed_text
-
-df = pd.read_excel(r"C:\Users\tejas\Downloads\sample.xlsx")
-df.insert(1, 'Processed', df['input_column'].apply(lambda x: process_and_learn(x)))
-
-df.tail(60)
+print(is_match("First Name", "src_mbr_frst_nm")) 

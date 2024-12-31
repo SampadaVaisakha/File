@@ -20,3 +20,52 @@ def is_match(full_term, shortcut):
     return False
 
 print(is_match("First Name", "src_mbr_frst_nm")) 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+import pandas as pd
+from difflib import SequenceMatcher
+
+# Fuzzy match function with similarity score
+def fuzzy_match(a, b):
+    return SequenceMatcher(None, a, b).ratio()
+
+# Function to find top 5 matches for each value
+def find_top_matches(source_values, target_values, top_n=5):
+    results = []
+    
+    for source_val in source_values:
+        matches = []
+        
+        for target_val in target_values:
+            score = fuzzy_match(source_val, target_val)
+            matches.append((target_val, score))
+            
+        # Sort matches by score (descending) and keep the top N
+        matches = sorted(matches, key=lambda x: x[1], reverse=True)[:top_n]
+        
+        for match in matches:
+            results.append({
+                'Source Value': source_val,
+                'Matched Value': match[0],
+                'Score': match[1]
+            })
+    
+    return results
+
+
+# Load Excel files
+source_df = pd.read_excel(r"C:\Users\tejas\Source.xlsx")
+target_df = pd.read_excel(r"C:\Users\tejas\Destination.xlsx")
+
+# Extract the relevant columns
+source_values = source_df['Logical Column Name'].astype(str).str.lower().tolist()
+target_values = target_df['Column Name'].astype(str).str.lower().tolist()
+
+# Find matches
+matches = find_top_matches(source_values, target_values)
+
+# Convert results to DataFrame and save to Excel
+matches_df = pd.DataFrame(matches)
+# matches_df.to_excel('matched_results.xlsx', index=False)
+
+matches_df

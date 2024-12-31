@@ -69,3 +69,73 @@ matches_df = pd.DataFrame(matches)
 # matches_df.to_excel('matched_results.xlsx', index=False)
 
 matches_df
+_____________________________________________________________________________________________________________________
+_____________________________________________________________________________________________________________________
+
+# NO MATCH VALUES CODE
+
+import pandas as pd
+from difflib import SequenceMatcher
+import re
+
+# Fuzzy match function with similarity score
+def fuzzy_match(a, b):
+    return SequenceMatcher(None, a, b).ratio()
+
+# Preprocessing function to clean and normalize strings
+def preprocess_string(s):
+    # Convert to lowercase
+    s = s.lower()
+
+    return s
+
+# Function to find top 5 matches for each value
+def find_top_matches(source_values, target_values, top_n=5, threshold=0.5):
+    results = []
+    
+    # Remove duplicates to avoid unnecessary repeats
+    source_values = list(set(source_values))
+    target_values = list(set(target_values))
+    
+    # Preprocess values for better matching
+    source_values = [preprocess_string(val) for val in source_values]
+    target_values = [preprocess_string(val) for val in target_values]
+    
+    for source_val in source_values:
+        matches = []
+        
+        for target_val in target_values:
+            score = fuzzy_match(source_val, target_val)
+            if score >= threshold:  # Only consider matches above the threshold
+                matches.append((target_val, score))
+        
+        # Sort matches by score (descending) and keep the top N
+        matches = sorted(matches, key=lambda x: x[1], reverse=True)[:top_n]
+        
+        # If no matches found above the threshold, return 'No Match'
+        if not matches:
+            matches = [('No Match', 0)]
+        
+        for match in matches:
+            results.append({
+                'Source Value': source_val,
+                'Matched Value': match[0],
+                'Score': match[1]
+            })
+    
+    return results
+
+# Load Excel files
+source_df = pd.read_excel(r"C:\Users\tejas\Source.xlsx")
+target_df = pd.read_excel(r"C:\Users\tejas\Destination.xlsx")
+
+# Extract the relevant columns
+source_values = source_df['Logical Column Name'].astype(str).tolist()
+target_values = target_df['Column Name'].astype(str).tolist()
+
+# Find matches
+matches = find_top_matches(source_values, target_values)
+
+# Convert results to DataFrame and save to Excel
+matches_df = pd.DataFrame(matches)
+matches_df

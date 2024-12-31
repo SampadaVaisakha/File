@@ -139,3 +139,91 @@ matches = find_top_matches(source_values, target_values)
 # Convert results to DataFrame and save to Excel
 matches_df = pd.DataFrame(matches)
 matches_df
+
+_____________________________________________________________________________________________________________________
+_____________________________________________________________________________________________________________________
+# Unmatched values df
+
+import pandas as pd
+from difflib import SequenceMatcher
+
+# Fuzzy match function with similarity score
+def fuzzy_match(a, b):
+    return SequenceMatcher(None, a, b).ratio()
+
+# Function to find top matches for each value with a dynamic threshold
+def find_top_matches(source_values, target_values, target_attr_values, top_n=5, threshold=0.6):
+    above_threshold = []  # Matches with score >= threshold
+    unmatched_values = []  # Values from source that don't have any match above threshold
+
+    for source_val in source_values:
+        matches = []
+        has_valid_match = False  # Flag to track if the value has a valid match
+        
+        # First, try comparing column name in target to logical column name in source
+        for target_val in target_values:
+            score = fuzzy_match(source_val, target_val)
+            matches.append((target_val, score))
+        
+        # Sort matches by score (descending) and keep the top N
+        matches = sorted(matches, key=lambda x: x[1], reverse=True)[:top_n]
+        
+        # Check if any match is above threshold
+        for match in matches:
+            if match[1] >= threshold:
+                above_threshold.append({
+                    'Source Value': source_val,
+                    'Matched Value': match[0],
+                    'Score': match[1]
+                })
+                has_valid_match = True  # Mark that we found a valid match
+        
+        # If no valid match from column name, compare with attribute name in target
+        if not has_valid_match:
+            for target_attr_val in target_attr_values:
+                score = fuzzy_match(source_val, target_attr_val)
+                matches.append((target_attr_val, score))
+            
+            # Sort matches again and check for matches above threshold
+            matches = sorted(matches, key=lambda x: x[1], reverse=True)[:top_n]
+            
+            for match in matches:
+                if match[1] >= threshold:
+                    above_threshold.append({
+                        'Source Value': source_val,
+                        'Matched Value': match[0],
+                        'Score': match[1]
+                    })
+                    has_valid_match = True  # Mark that we found a valid match
+        
+        # If no valid match, add the source value to unmatched_values
+        if not has_valid_match:
+            unmatched_values.append(source_val)
+
+    return above_threshold, unmatched_values
+
+
+# Load Excel files
+source_df = pd.read_excel(r"C:\Users\tejas\Source.xlsx")
+target_df = pd.read_excel(r"C:\Users\tejas\Destination.xlsx")
+
+# Extract the relevant columns
+source_values = source_df['Logical Column Name'].astype(str).str.lower().tolist()
+target_values = target_df['Column Name'].astype(str).str.lower().tolist()
+target_attr_values = target_df['Attribute Name'].astype(str).str.lower().tolist()
+
+# Set threshold value (adjust this value as needed)
+threshold_value = 0.5  # For example, 50% threshold for matching
+
+# Find matches based on threshold
+above_matches, unmatched_values = find_top_matches(source_values, target_values, target_attr_values, threshold=threshold_value)
+
+# Convert results to DataFrame and save to Excel
+above_matches_df = pd.DataFrame(above_matches)
+unmatched_values_df = pd.DataFrame(unmatched_values, columns=['Unmatched Values'])
+
+# Optionally, save the results to Excel (uncomment to save)
+# above_matches_df.to_excel('above_threshold_matches.xlsx', index=False)
+# unmatched_values_df.to_excel('unmatched_values.xlsx', index=False)
+above_matches_df, unmatched_values_df
+

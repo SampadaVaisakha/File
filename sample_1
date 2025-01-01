@@ -263,3 +263,54 @@ def find_top_matches(source_values, target_values, target_attr_values, top_n=5, 
     
     return above_threshold, unmatched_values
 
+#_____________________________________________________________________________________________________________________
+#_____________________________________________________________________________________________________________________
+
+#sample code
+
+import pandas as pd
+from thefuzz import fuzz
+from difflib import SequenceMatcher
+
+def fuzzy_match(a, b):
+    return max(
+        SequenceMatcher(None, a, b).ratio(),
+        fuzz.ratio(a, b) / 100,
+        fuzz.partial_ratio(a, b) / 100,
+        fuzz.token_sort_ratio(a, b) / 100
+    )
+
+def find_top_matches(source_values, target_df, top_n=5, threshold=0.85):
+    above_threshold, unmatched_values = [], []
+    target_values = target_df['Column Name'].astype(str).str.lower().tolist()
+    target_attr_values = target_df['Attribute Name'].astype(str).str.lower().tolist()
+    
+    for source_val in source_values:
+        matches = [(t, t, fuzzy_match(source_val, t)) for t in target_values]
+        matches = sorted(matches, key=lambda x: x[2], reverse=True)[:top_n]
+        
+        if not any(m[2] >= threshold for m in matches):
+            matches = [(target_attr_values[idx], target_df.iloc[idx]['Column Name'], fuzzy_match(source_val, target_attr_values[idx])) for idx in range(len(target_attr_values))]
+            matches = sorted(matches, key=lambda x: x[2], reverse=True)[:top_n]
+        
+        if any(m[2] >= threshold for m in matches):
+            above_threshold.extend({
+                'Source Value': source_val,
+                'Matched Value': m[1],
+                'Score': m[2]
+            } for m in matches if m[2] >= threshold)
+        else:
+            unmatched_values.append(source_val)
+    
+    return above_threshold, unmatched_values
+
+source_df = pd.read_excel(r"C:\Users\tejas\Source.xlsx")
+target_df = pd.read_excel(r"C:\Users\tejas\Destination.xlsx")
+source_values = source_df['Logical Column Name'].astype(str).str.lower().tolist()
+threshold_value = 0.85
+above_matches, unmatched_values = find_top_matches(source_values, target_df, threshold=threshold_value)
+
+above_matches_df = pd.DataFrame(above_matches)
+unmatched_values_df = pd.DataFrame(unmatched_values, columns=['Unmatched Values'])
+
+above_matches_df, unmatched_values_df

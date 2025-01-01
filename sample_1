@@ -226,4 +226,40 @@ unmatched_values_df = pd.DataFrame(unmatched_values, columns=['Unmatched Values'
 # above_matches_df.to_excel('above_threshold_matches.xlsx', index=False)
 # unmatched_values_df.to_excel('unmatched_values.xlsx', index=False)
 above_matches_df, unmatched_values_df
+#_________________________________________________________________________________________________________
+
+def find_top_matches(source_values, target_values, target_attr_values, top_n=5, threshold=0.6):
+    above_threshold = []
+    unmatched_values = []
+    
+    for source_val in source_values:
+        matches = []
+        
+        # Compare with column names
+        for target_val in target_values:
+            score = fuzzy_match(source_val, target_val)
+            matches.append((target_val, score))
+        
+        # Compare with attribute names
+        for target_attr_val in target_attr_values:
+            score = fuzzy_match(source_val, target_attr_val)
+            matches.append((target_attr_val, score))
+        
+        # Sort all matches and get the top N
+        matches = sorted(matches, key=lambda x: x[1], reverse=True)[:top_n]
+        
+        has_valid_match = False
+        for match in matches:
+            if match[1] >= threshold:
+                above_threshold.append({
+                    'Source Value': source_val,
+                    'Matched Value': match[0],
+                    'Score': match[1]
+                })
+                has_valid_match = True
+        
+        if not has_valid_match:
+            unmatched_values.append(source_val)
+    
+    return above_threshold, unmatched_values
 

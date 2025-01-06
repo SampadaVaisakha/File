@@ -314,3 +314,45 @@ above_matches_df = pd.DataFrame(above_matches)
 unmatched_values_df = pd.DataFrame(unmatched_values, columns=['Unmatched Values'])
 
 above_matches_df, unmatched_values_df
+
+
+
+
+
+import pandas as pd
+from thefuzz import fuzz, process
+
+# Load the Excel files
+synonyms_df = pd.read_excel('Synonyms.xlsx')
+source_df = pd.read_excel('Source.xlsx')
+
+# Create a mapping dictionary from Full Form to all possible synonyms
+synonym_dict = {}
+
+for idx, row in synonyms_df.iterrows():
+    full_form = row['Full Form'].lower()
+    shortcut = row['Shortcut Name'].lower()
+
+    if full_form in synonym_dict:
+        synonym_dict[full_form].add(full_form)
+        synonym_dict[full_form].add(shortcut)
+    else:
+        synonym_dict[full_form] = {full_form, shortcut}
+
+    if shortcut in synonym_dict:
+        synonym_dict[shortcut].add(full_form)
+        synonym_dict[shortcut].add(shortcut)
+    else:
+        synonym_dict[shortcut] = {full_form, shortcut}
+
+# Flatten the dictionary to create a unified mapping
+mapped_terms = {}
+for key, values in synonym_dict.items():
+    for value in values:
+        mapped_terms[value] = key
+
+# Apply mapping to the source DataFrame
+source_df['Mapped Value'] = source_df['Word'].str.lower().map(mapped_terms)
+
+# Save the results to Excel
+source_df.to_excel('Mapped_Source.xlsx', index=False)

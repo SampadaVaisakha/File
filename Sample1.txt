@@ -1,4 +1,114 @@
+import pandas as pd
+from rapidfuzz import process, fuzz
+import re
 
+# Load Excel files
+source_df = pd.read_excel(r"C:\Users\tejas\Source.xlsx")
+destination_df = pd.read_excel(r"C:\Users\tejas\Destination.xlsx")
+synonyms_df = pd.read_excel(r"C:\Users\tejas\WlpStdNames.xlsx")
+mapping_df = pd.read_excel(r"C:\Users\tejas\elv_mapping.xlsx")
+
+# Normalize strings (remove special characters and lowercase)
+def normalize_string(s):
+    return re.sub(r'\W+', ' ', str(s)).strip().lower()
+
+# Apply mappings to replace shortcuts and synonyms
+def apply_mappings(text):
+    for _, row in synonyms_df.iterrows():
+        text = re.sub(fr'\b{row["col_name"].lower()}\b', row["col_short_name"].lower(), text)
+    
+    for _, row in mapping_df.iterrows():
+        text = re.sub(fr'\b{row["col_name"].lower()}\b', row["elv_mapping"].lower(), text)
+    
+    return text
+
+# Extract meaningful tokens (split by non-alphanumeric characters)
+def extract_tokens(text):
+    return re.findall(r'\w+', text.lower())
+
+# Extract prefix and number for stricter matching (e.g., diagnosis code 10 -> diag 10)
+def extract_prefix_number(text):
+    match = re.search(r'(.*?)(\d+)$', text.lower())
+    if match:
+        prefix, number = match.groups()
+        return prefix.strip(), number
+    return text, None
+
+# Custom matching logic (prioritizing exact number matches)
+def custom_match(source_val, destination_list):
+    best_match = None
+    highest_score = 0
+    
+    source_tokens = extract_tokens(source_val)
+    source_prefix, source_number = extract_prefix_number(source_val)
+
+    for dest_val in destination_list:
+        dest_tokens = extract_tokens(dest_val)
+        dest_prefix, dest_number = extract_prefix_number(dest_val)
+        
+        # Exact match for prefix + number (e.g., diag_10_cd)
+        if source_number and source_number == dest_number and source_prefix in dest_prefix:
+            return dest_val, 100
+
+        # Token overlap score (better structure matching)
+        token_overlap = len(set(source_tokens) & set(dest_tokens)) / len(set(source_tokens))
+        score = fuzz.partial_ratio(source_val, dest_val) * 0.7 + token_overlap * 30
+        
+        # Store highest score
+        if score > highest_score:
+            highest_score = score
+            best_match = dest_val
+    
+    return best_match, highest_score
+
+# Match source values with destination values
+def find_top_matches(source_values, destination_df, threshold=70):
+    matches = []
+    unmatched = []
+    
+    # Normalize and map destination values
+    destination_df['Normalized'] = destination_df['Attribute Name'].astype(str).apply(normalize_string).apply(apply_mappings)
+    destination_list = destination_df['Normalized'].tolist()
+    destination_columns = destination_df['Column Name'].tolist()
+    
+    for source_val in source_values:
+        normalized_source_val = apply_mappings(normalize_string(source_val))
+        
+        best_match, score = custom_match(normalized_source_val, destination_list)
+        
+        if score >= threshold:
+            idx = destination_list.index(best_match)
+            matches.append({
+                'Source Value': source_val,
+                'Matched Attribute': best_match,
+                'Matched Column Name': destination_columns[idx],
+                'Score': round(score)
+            })
+        else:
+            unmatched.append(source_val)
+    
+    return matches, unmatched
+
+# Remove duplicates from source and destination files
+def remove_duplicates(df, subset):
+    return df.drop_duplicates(subset=subset)
+
+final_source_df = remove_duplicates(source_df, subset=['Physical Column Description', 'Logical Column Name'])
+final_destination_df = remove_duplicates(destination_df, subset=['Column Name', 'Attribute Description'])
+
+# Get source values for matching
+source_values = final_source_df['Logical Column Name'].astype(str).tolist()
+
+# Perform matching
+matched_results, unmatched_results = find_top_matches(source_values, final_destination_df)
+
+# Create DataFrame for matches
+matched_df = pd.DataFrame(matched_results)
+matched_df.to_excel('matched_results.xlsx', index=False)
+
+# Print unmatched values
+print("Unmatched Values:", unmatched_results)
+#-----------_-&----&---&&----------
 
 import pandas as pd
 from rapidfuzz import process, fuzz

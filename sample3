@@ -1,0 +1,111 @@
+import pandas as pd
+from rapidfuzz import process, fuzz
+from difflib import SequenceMatcher
+import re
+
+# Load Excel files
+source_df = pd.read_excel(r"C:\Users\tejas\Source.xlsx")
+destination_df = pd.read_excel(r"C:\Users\tejas\Destination.xlsx")
+synonyms_df = pd.read_excel(r"C:\Users\tejas\WlpStdNames.xlsx")
+mapping_df = pd.read_excel(r"C:\Users\tejas\elv_mapping.xlsx")
+shortcut_df = pd.read_excel(r"C:\Users\tejas\ShortcutFile.xlsx")  # Assuming this file contains mappings for shortcuts
+
+# Helper functions
+def remove_duplicates(df, subset):
+    return df.drop_duplicates(subset=subset)
+
+# Normalize and clean strings
+def normalize_string(s):
+    s = re.sub(r'\W+', ' ', s).strip().lower()
+    return s
+
+# Apply synonym and abbreviation mapping
+def apply_mappings(text):
+    # Apply synonym mappings (like currency -> money)
+    for _, row in synonyms_df.iterrows():
+        text = re.sub(fr'\b{row["col_name"].lower()}\b', row["col_short_name"].lower(), text)
+    
+    # Apply ELV mappings (like specific column name mappings)
+    for _, row in mapping_df.iterrows():
+        text = re.sub(fr'\b{row["col_name"].lower()}\b', row["elv_mapping"].lower(), text)
+    
+    # Apply shortcut mappings (like currency -> crncy)
+    for _, row in shortcut_df.iterrows():
+        text = re.sub(fr'\b{row["full_term"].lower()}\b', row["shortcut"].lower(), text)
+    
+    return text
+
+# String matching using multiple scorers
+def string_match(a, b):
+    return max(
+        SequenceMatcher(None, a, b).ratio(),
+        fuzz.ratio(a, b) / 100,
+        fuzz.partial_ratio(a, b) / 100,
+        fuzz.token_set_ratio(a, b) / 100,
+        fuzz.token_sort_ratio(a, b) / 100
+    )
+
+# Extract prefix and number from text (used for structured matching)
+def extract_prefix_number(text):
+    match = re.search(r'(.*?)(\d+)$', text.lower())
+    if match:
+        prefix, number = match.groups()
+        return prefix.strip(), number
+    return text, None
+
+# Function to find top matches between source and destination data
+def find_top_matches(source_values, final_destination_df, limit=5, threshold=40):
+    matches = []
+    unmatched_values = []
+    
+    destination_attr_values = final_destination_df['Attribute Name'].astype(str).apply(normalize_string).apply(apply_mappings).tolist()
+    destination_column_names = final_destination_df['Column Name'].astype(str).tolist()
+    
+    for source_val in source_values:
+        normalized_source_val = apply_mappings(normalize_string(source_val))  # Apply mappings to source value
+        source_prefix, source_number = extract_prefix_number(source_val)  # Extract any prefix and number from source
+        
+        # Perform fuzzy matching
+        top_matches = process.extract(normalized_source_val, destination_attr_values, scorer=fuzz.token_sort_ratio, limit=limit)
+        
+        # Apply stricter matching using prefix and number if available
+        if source_number:
+            filtered_matches = [
+                match for match in top_matches
+                if re.search(rf'{re.escape(source_prefix)}[\s_]*{source_number}', match[0].lower()) and match[1] >= threshold
+            ]
+        else:
+            filtered_matches = [match for match in top_matches if match[1] >= threshold]
+        
+        # If no filtered matches found, attempt to match based on number alone (if applicable)
+        if not filtered_matches and source_number:
+            filtered_matches = [
+                match for match in top_matches
+                if re.search(rf'{source_number}\b', match[0].lower()) and match[1] >= threshold
+            ]
+        
+        # Store matches or mark as unmatched
+        if filtered_matches:
+            for match in filtered_matches[:5]:
+                idx = destination_attr_values.index(match[0]) if match[0] in destination_attr_values else None
+                matches.append({
+                    'Source Value': source_val,
+                    'Matched Attribute': match[0],
+                    'Matched Column Name': destination_column_names[idx],
+                    'Score': round(match[1])
+                })
+        else:
+            unmatched_values.append(source_val)
+
+    return matches, unmatched_values
+
+# Remove duplicates and prepare data
+final_source_df = remove_duplicates(source_df, subset=['Physical Column Description', 'Logical Column Name'])
+final_destination_df = remove_duplicates(destination_df, subset=['Column Name', 'Attribute Description'])
+
+source_values = final_source_df['Logical Column Name'].astype(str).tolist()
+threshold_value = 40
+
+# Match results
+matched_results, unmatched_results = find_top_matches(source_values, final_destination_df, limit=5, threshold=threshold_value)
+matched_df = pd.DataFrame(matched_results)

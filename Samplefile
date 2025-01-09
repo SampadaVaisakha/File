@@ -1,6 +1,6 @@
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 # Load Excel files
 source_df = pd.read_excel(r"C:\Users\tejas\Source.xlsx")
@@ -8,24 +8,28 @@ destination_df = pd.read_excel(r"C:\Users\tejas\Destination.xlsx")
 synonyms_df = pd.read_excel(r"C:\Users\tejas\WlpStdNames.xlsx")
 mapping_df = pd.read_excel(r"C:\Users\tejas\elv_mapping.xlsx")
 
-# Load pre-trained BERT model (can use other models like 'all-MiniLM-L6-v2' or 'paraphrase-MiniLM')
-model = SentenceTransformer('all-MiniLM-L6-v2')
-
-# Normalize strings
+# Normalize and clean strings
 def normalize_string(s):
     return re.sub(r'\W+', ' ', str(s)).strip().lower()
 
-# Apply mappings (shortcuts and synonyms)
-def apply_mappings(text):
-    for _, row in synonyms_df.iterrows():
-        text = re.sub(fr'\b{row["col_name"].lower()}\b', row["col_short_name"].lower(), text)
-    
-    for _, row in mapping_df.iterrows():
-        text = re.sub(fr'\b{row["col_name"].lower()}\b', row["elv_mapping"].lower(), text)
-    
-    return text
+# Create dictionaries for mappings
+def build_mapping_dict(df, col_from, col_to):
+    mapping = {}
+    for _, row in df.iterrows():
+        mapping[normalize_string(row[col_from])] = normalize_string(row[col_to])
+    return mapping
 
-# Extract prefix and number from strings
+synonym_dict = build_mapping_dict(synonyms_df, "col_name", "col_short_name")
+mapping_dict = build_mapping_dict(mapping_df, "col_name", "elv_mapping")
+
+# Apply synonym and abbreviation mappings
+def apply_mappings(text):
+    normalized_text = normalize_string(text)
+    words = normalized_text.split()
+    mapped_words = [mapping_dict.get(word, synonym_dict.get(word, word)) for word in words]
+    return " ".join(mapped_words)
+
+# Extract prefix and number
 def extract_prefix_number(text):
     match = re.search(r'(.*?)(\d+)$', text.lower())
     if match:
@@ -33,91 +37,96 @@ def extract_prefix_number(text):
         return prefix.strip(), number
     return text, None
 
-# Encode source and destination attributes using BERT
-def encode_values(values):
-    return model.encode(values, convert_to_tensor=True)
+# Jaccard similarity for token overlap
+def jaccard_similarity(a, b):
+    a_tokens = set(a.split())
+    b_tokens = set(b.split())
+    intersection = len(a_tokens & b_tokens)
+    union = len(a_tokens | b_tokens)
+    return intersection / union if union != 0 else 0
 
-# Custom match (combines prefix matching and semantic matching)
-def semantic_match(source_val, destination_list, encoded_dest, threshold=0.75):
-    source_encoded = encode_values([source_val])
+# Token similarity (for handling reordered terms)
+def token_similarity(a, b):
+    a_tokens = set(re.findall(r'\w+', a))
+    b_tokens = set(re.findall(r'\w+', b))
+    return len(a_tokens & b_tokens) / max(len(a_tokens), len(b_tokens)) if a_tokens and b_tokens else 0
+
+# Matching logic
+def match_source_to_destination(source_val, destination_list, destination_columns, threshold=0.75):
+    normalized_source_val = apply_mappings(source_val)
+    source_prefix, source_number = extract_prefix_number(normalized_source_val)
     
-    # Compute cosine similarity
-    similarities = util.pytorch_cos_sim(source_encoded, encoded_dest)[0]
+    best_match = None
+    best_score = 0
     
-    # Get the best match
-    best_score, best_idx = similarities.max(), similarities.argmax().item()
-    
+    for idx, dest_val in enumerate(destination_list):
+        dest_prefix, dest_number = extract_prefix_number(dest_val)
+        
+        # Strict prefix and number matching
+        if source_number and source_number == dest_number and source_prefix in dest_prefix:
+            return {
+                'Source Value': source_val,
+                'Matched Attribute': dest_val,
+                'Matched Column Name': destination_columns[idx],
+                'Score': 100
+            }
+        
+        # Compute Jaccard similarity and token similarity
+        jaccard_score = jaccard_similarity(normalized_source_val, dest_val)
+        token_score = token_similarity(normalized_source_val, dest_val)
+        
+        # Weighted scoring
+        combined_score = (jaccard_score * 0.5) + (token_score * 0.5)
+        
+        if combined_score > best_score:
+            best_score = combined_score
+            best_match = dest_val
+
+    # Return match if score meets threshold
     if best_score >= threshold:
-        return destination_list[best_idx], best_score.item() * 100
-    else:
-        return None, 0
+        idx = destination_list.index(best_match)
+        return {
+            'Source Value': source_val,
+            'Matched Attribute': best_match,
+            'Matched Column Name': destination_columns[idx],
+            'Score': round(best_score * 100)
+        }
+    return None
 
-# Match source values with destination attributes
-def find_top_matches(source_values, destination_df, threshold=75):
-    matches = []
-    unmatched = []
-    
-    # Prepare destination attributes
-    destination_df['Normalized'] = destination_df['Attribute Name'].astype(str).apply(normalize_string).apply(apply_mappings)
+# Main matching function with parallel processing
+def find_top_matches_parallel(source_values, destination_df, threshold=0.75):
+    destination_df['Normalized'] = destination_df['Attribute Column'].astype(str).apply(normalize_string).apply(apply_mappings)
     destination_list = destination_df['Normalized'].tolist()
     destination_columns = destination_df['Column Name'].tolist()
     
-    # Encode all destination values once
-    encoded_dest = encode_values(destination_list)
-    
-    for source_val in source_values:
-        normalized_source_val = apply_mappings(normalize_string(source_val))
-        source_prefix, source_number = extract_prefix_number(normalized_source_val)
+    matches = []
+    unmatched = []
 
-        # Try exact prefix + number match first
-        exact_match = None
-        for dest_val in destination_list:
-            dest_prefix, dest_number = extract_prefix_number(dest_val)
-            if source_number and source_number == dest_number and source_prefix in dest_prefix:
-                exact_match = dest_val
-                break
-        
-        if exact_match:
-            idx = destination_list.index(exact_match)
-            matches.append({
-                'Source Value': source_val,
-                'Matched Attribute': exact_match,
-                'Matched Column Name': destination_columns[idx],
-                'Score': 100
-            })
-        else:
-            # Perform semantic matching
-            best_match, score = semantic_match(normalized_source_val, destination_list, encoded_dest, threshold / 100)
-            
-            if best_match:
-                idx = destination_list.index(best_match)
-                matches.append({
-                    'Source Value': source_val,
-                    'Matched Attribute': best_match,
-                    'Matched Column Name': destination_columns[idx],
-                    'Score': round(score)
-                })
+    # Use ThreadPoolExecutor for parallel processing
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(match_source_to_destination, source_val, destination_list, destination_columns, threshold)
+            for source_val in source_values
+        ]
+        for future in futures:
+            result = future.result()
+            if result:
+                matches.append(result)
             else:
-                unmatched.append(source_val)
-
+                unmatched.append(future.args[0])
+    
     return matches, unmatched
 
-# Remove duplicates
-def remove_duplicates(df, subset):
-    return df.drop_duplicates(subset=subset)
-
-# Prepare data
-final_source_df = remove_duplicates(source_df, subset=['Physical Column Description', 'Logical Column Name'])
-final_destination_df = remove_duplicates(destination_df, subset=['Column Name', 'Attribute Description'])
+# Preprocess and match
+final_source_df = source_df.drop_duplicates(subset=['Logical Column Name'])
+final_destination_df = destination_df.drop_duplicates(subset=['Column Name'])
 
 source_values = final_source_df['Logical Column Name'].astype(str).tolist()
 
-# Perform matching
-matched_results, unmatched_results = find_top_matches(source_values, final_destination_df)
+matched_results, unmatched_results = find_top_matches_parallel(source_values, final_destination_df)
 
-# Create DataFrame
+# Save results
 matched_df = pd.DataFrame(matched_results)
-matched_df.to_excel('matched_results.xlsx', index=False)
+matched_df.to_excel('matched_results_optimized.xlsx', index=False)
 
-# Print unmatched values
 print("Unmatched Values:", unmatched_results)

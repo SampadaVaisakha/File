@@ -1,4 +1,105 @@
 import pandas as pd
+from rapidfuzz import process, fuzz
+import re
+
+# Load Excel files
+source_df = pd.read_excel(r"C:\Users\tejas\Source.xlsx")
+destination_df = pd.read_excel(r"C:\Users\tejas\Destination.xlsx")
+synonyms_df = pd.read_excel(r"C:\Users\tejas\WlpStdNames.xlsx")
+mapping_df = pd.read_excel(r"C:\Users\tejas\elv_mapping.xlsx")
+
+# Normalize strings (remove special characters and lowercase)
+def normalize_string(s):
+    return re.sub(r'\W+', ' ', str(s)).strip().lower()
+
+# Apply mappings to replace shortcuts and synonyms
+def apply_mappings(text):
+    if pd.isna(text):
+        return ''
+    for _, row in synonyms_df.iterrows():
+        text = re.sub(fr'\b{normalize_string(row["col_name"])}\b', normalize_string(row["col_short_name"]), text)
+    for _, row in mapping_df.iterrows():
+        text = re.sub(fr'\b{normalize_string(row["col_name"])}\b', normalize_string(row["elv_mapping"]), text)
+    return text
+
+# Match logic with improved handling of NaN values
+def find_best_match(source_val, destination_df):
+    best_match = None
+    highest_score = 0
+
+    # Iterate through each destination row
+    for _, row in destination_df.iterrows():
+        dest_attribute = row['Attribute Name']
+        dest_column = row['Column Name']
+
+        # Use 'Column Name' if 'Attribute Name' is NaN
+        if pd.isna(dest_attribute):
+            dest_text = normalize_string(dest_column)
+        else:
+            dest_text = normalize_string(dest_attribute)
+
+        # Compute fuzzy match score
+        score = fuzz.partial_ratio(source_val, dest_text)
+
+        # Update the best match if the score is higher
+        if score > highest_score:
+            highest_score = score
+            best_match = {
+                'Matched Attribute': row['Attribute Name'],
+                'Matched Column Name': dest_column,
+                'Score': score
+            }
+
+    return best_match
+
+# Match source values to destination values
+def match_source_to_destination(source_values, destination_df, threshold=70):
+    matches = []
+    unmatched = []
+
+    # Normalize and map destination values
+    destination_df['Normalized Attribute'] = destination_df['Attribute Name'].astype(str).apply(normalize_string).apply(apply_mappings)
+
+    for source_val in source_values:
+        normalized_source_val = apply_mappings(normalize_string(source_val))
+
+        best_match = find_best_match(normalized_source_val, destination_df)
+
+        if best_match and best_match['Score'] >= threshold:
+            matches.append({
+                'Source Value': source_val,
+                **best_match
+            })
+        else:
+            unmatched.append(source_val)
+
+    return matches, unmatched
+
+# Remove duplicates from source and destination files
+def remove_duplicates(df, subset):
+    return df.drop_duplicates(subset=subset)
+
+# Preprocess source and destination data
+final_source_df = remove_duplicates(source_df, subset=['Physical Column Description', 'Logical Column Name'])
+final_destination_df = remove_duplicates(destination_df, subset=['Column Name', 'Attribute Description'])
+
+# Get source values for matching
+source_values = final_source_df['Logical Column Name'].astype(str).tolist()
+
+# Perform matching
+matched_results, unmatched_results = match_source_to_destination(source_values, final_destination_df)
+
+# Save results to Excel
+matched_df = pd.DataFrame(matched_results)
+matched_df.to_excel('matched_results.xlsx', index=False)
+
+# Print unmatched values
+print("Unmatched Values:", unmatched_results)
+
+
+
+#___________
+import pandas as pd
 from rapidfuzz import fuzz
 import re
 

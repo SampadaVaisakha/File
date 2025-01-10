@@ -1,0 +1,103 @@
+import pandas as pd
+from rapidfuzz import process, fuzz
+from difflib import SequenceMatcher
+import re
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Load Excel files
+source_df = pd.read_excel(r"C:\Users\tejas\Source.xlsx")
+destination_df = pd.read_excel(r"C:\Users\tejas\Destination.xlsx")
+synonyms_df = pd.read_excel(r"C:\Users\tejas\WlpStdNames.xlsx")
+mapping_df = pd.read_excel(r"C:\Users\tejas\elv_mapping.xlsx")
+
+# Helper functions
+def remove_duplicates(df, subset):
+    logging.debug(f"Removing duplicates based on columns: {subset}")
+    return df.drop_duplicates(subset=subset)
+
+# Normalize and clean strings
+def normalize_string(s):
+    s = re.sub(r'\W+', ' ', s).strip().lower()
+    logging.debug(f"Normalized string: {s}")
+    return s
+
+# Apply synonym and abbreviation mapping
+def apply_mappings(text):
+    original_text = text
+    for _, row in synonyms_df.iterrows():
+        text = re.sub(fr'\b{row["col_name"].lower()}\b', row["col_short_name"].lower(), text)
+    for _, row in mapping_df.iterrows():
+        text = re.sub(fr'\b{row["col_name"].lower()}\b', row["elv_mapping"].lower(), text)
+    logging.debug(f"Applied mappings: Original text = {original_text}, Mapped text = {text}")
+    return text
+
+# String matching using multiple scorers
+def string_match(a, b):
+    scores = [
+        SequenceMatcher(None, a, b).ratio(),
+        fuzz.ratio(a, b) / 100,
+        fuzz.partial_ratio(a, b) / 100,
+        fuzz.token_set_ratio(a, b) / 100,
+        fuzz.token_sort_ratio(a, b) / 100
+    ]
+    max_score = max(scores)
+    logging.debug(f"String match scores: {scores}, Max score = {max_score}")
+    return max_score
+
+def find_top_matches(source_values, final_destination_df, limit=5, threshold=40):
+    matches = []
+    unmatched_values = []
+    
+    destination_attr_values = final_destination_df['Attribute Name'].astype(str).apply(normalize_string).apply(apply_mappings).tolist()
+    destination_column_values = final_destination_df['Column Name'].astype(str).apply(normalize_string).apply(apply_mappings).tolist()
+    destination_column_names = final_destination_df['Column Name'].astype(str).tolist()
+    
+    logging.debug("Starting fuzzy matching process...")
+    for source_val in source_values:
+        normalized_source_val = apply_mappings(normalize_string(source_val))
+        logging.debug(f"Processing source value: {source_val}, Normalized value: {normalized_source_val}")
+        
+        # Combine attribute and column values for matching
+        combined_destinations = destination_attr_values + destination_column_values
+        
+        # Perform fuzzy matching
+        top_matches = process.extract(normalized_source_val, combined_destinations, scorer=fuzz.token_sort_ratio, limit=limit)
+        logging.debug(f"Top matches for '{source_val}': {top_matches}")
+        
+        # Filter matches based on threshold
+        filtered_matches = [match for match in top_matches if match[1] >= threshold]
+        
+        # Store matches or mark as unmatched
+        if filtered_matches:
+            for match in filtered_matches[:5]:
+                idx = combined_destinations.index(match[0])
+                column_name = destination_column_names[idx % len(destination_column_names)] if idx < len(destination_column_names) else None
+                matches.append({
+                    'Source Value': source_val,
+                    'Matched Value': match[0],
+                    'Matched Column Name': column_name,
+                    'Score': round(match[1])
+                })
+        else:
+            unmatched_values.append(source_val)
+            logging.debug(f"No match found for source value: {source_val}")
+
+    return matches, unmatched_values
+
+# Remove duplicates and prepare data
+final_source_df = remove_duplicates(source_df, subset=['Physical Column Description', 'Logical Column Name'])
+final_destination_df = remove_duplicates(destination_df, subset=['Column Name', 'Attribute Description'])
+
+source_values = final_source_df['Logical Column Name'].astype(str).tolist()
+threshold_value = 40
+
+# Match results
+matched_results, unmatched_results = find_top_matches(source_values, final_destination_df, limit=5, threshold=threshold_value)
+matched_df = pd.DataFrame(matched_results)
+
+# Log final results
+logging.info(f"Matched results:\n{matched_df}")
+logging.info(f"Unmatched values:\n{unmatched_results}")

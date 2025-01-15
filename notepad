@@ -1,0 +1,89 @@
+these are the 4 excel iam having and here are the  sample records of each 
+i want you to work on these 4 excel for solving my problem 
+
+main target is to match the source file 'Logical Column Name' values to the destination file 'Attribute name' OR 'Column Name' values
+
+example output :
+
+Logical column name     Attribute Name    		Column Name
+
+LAST NAME	Source Member First Name		SRC_MBR_FRST_NM
+FIRST NAME	Source Member Last Name			SRC_MBR_LAST_NM
+MIDDLE NAME	Source Member Middle Initial Name 	SRC_MBR_MID_INIT_NM
+BIRTHDATE	Source Member Birth Date		SRC_MBR_BRTH_DT
+GENDER CODE	Source Member Gender Code		SRC_MBR_GNDR_CD
+DIAGNOSIS TYPECODE 1    Diagnosis 1 Code		DIAG 1 CD
+DIAGNOSIS TYPECODE 2	Diagnosis 2 Code		DIAG 2 CD
+DIAGNOSIS TYPECODE 3 	Diagnosis 3 Code		DIAG 3 CD
+DIAGNOSIS TYPECODE 4	Diagnosis 4 Code		DIAG 4 CD
+DIAGNOSIS TYPECODE 5	NaN		DIAG 5 CD
+DIAGNOSIS TYPECODE 6	NaN		DIAG 6 CD
+DIAGNOSIS TYPECODE 7	NaN		DIAG 7 CD
+DIAGNOSIS TYPECODE 8 	NaN		DIAG 8 CD
+DIAGNOSIS TYPECODE 9 	NaN		DIAG 9 CD
+DIAGNOSIS TYPECODE 10 	NaN		DIAG 10 CD
+DIAGNOSIS TYPECODE 11 	NaN		DIAG 11 CD
+DIAGNOSIS TYPECODE 12 	NaN		DIAG 12 CD
+DIAGNOSIS CODE 1 	Diagnosis 1 Code		DIAG 1 CD
+DIAGNOSIS CODE 2	Diagnosis 2 Code		DIAG 2 CD
+DIAGNOSIS CODE 3 	Diagnosis 3 Code		DIAG 3 CD
+DIAGNOSIS CODE 4	Diagnosis 4 Code		DIAG 4 CD
+DIAGNOSIS CODE 5	NaN		DIAG 5 CD
+DIAGNOSIS CODE 6	NaN		DIAG 6 CD
+DIAGNOSIS CODE 7	NaN		DIAG 7 CD
+DIAGNOSIS CODE 8 	NaN		DIAG 8 CD
+DIAGNOSIS CODE 9 	NaN		DIAG 9 CD
+DIAGNOSIS CODE 10 	NaN		DIAG 10 CD
+DIAGNOSIS CODE 11 	NaN		DIAG 11 CD
+DIAGNOSIS CODE 12 	NaN		DIAG 12 CD
+i hope you understood the output approach
+
+first i want you to remove the duplicates in 
+source file: 'Physical Column Description', 'Logical Column Name'
+destination file: 'Column Name', 'Attribute Description'
+
+then you should normalize the string 
+if there are any special chars remove and also there are nan values in the excel
+except destination file:  'Attribute Description' if there are nan values in any other files handle them or remove
+we have nan in attribute column, but if we replace it with any string then it would check the match with that string and source value which may lead to less match and ignore the column name value which is actually the best match
+so handle such cases properly with your knowledge
+
+later step
+apply the mappings like for the source or destination file words check if there is any shortcut or alternative word which can help to match correctly
+example:
+
+
+PDPD ID is prod id or product id which can actually match with product id	PROD_ID
+checking the match with PDPD is difficult but checking the match for Product/ prod is easy to match correctly
+
+SGSG ID
+for this the alternate word is SURGRP as per the elv_mapping excel so we can check for subgrp id
+I hope you understand 
+
+
+next step is to extract the number from the source value if any and return the prefix word and number
+now I can think this can work easily:
+first if you take the number and get all the matches for the number and then check the match for the prefix having that number 
+example:
+
+the input word 'DIAGNOSIS CODE 9'
+number extracted 9 checking the matched words with 9 
+#N/A	CUM LINE PRSNT_ON_ADMSN_9_CD
+#N/A	CLM_LINE PRSNT ON ADMSN 19 CD
+#N/A	SRC_CLM_LINE_PRSNT_ON_ADMSN_9_CD
+#N/A	SRC_CLM_LINE_PRSNT_ON_ADMSN_19_CD
+#N/A	CNDTN 9 CD
+#N/A	DIAG_9_CD
+#N/A	DIAG 19_CD
+#N/A	ICD_PROC_9_CD
+#N/A	ICD_PROC_9_DT
+#N/A	OCRNC_9_CD
+#N/A	OCRNC_9_DT
+
+these are the matches having 9 in the word and now ceck for the prefix match 'DIAGNOSIS CODE'
+#N/A	DIAG_9_CD
+#N/A	DIAG 19_CD
+here Is the matches the number is only 9 so the first will the highest match 2nd match would be this #N/A	DIAG 19_CD
+so I want you to do it step by step so that we can achieve the accuracy 100%
+
+keeping all this in mind please help me to achieve the best results 

@@ -1,3 +1,130 @@
+
+
+
+import pandas as pd
+from rapidfuzz import fuzz
+import re
+import logging
+
+# Configure logger
+logging.basicConfig(
+    filename="matching_process.log",  # Log file
+    filemode="w",  # Overwrite file on each run
+    format="%(asctime)s - %(levelname)s - %(message)s",  # Log format
+    level=logging.DEBUG,  # Log level
+)
+
+# Log the start of the process
+logging.info("Starting the matching process...")
+
+# Load Excel files
+try:
+    source_df = pd.read_excel(r"C:\\Users\\tejas\\Source.xlsx")
+    destination_df = pd.read_excel(r"C:\\Users\\tejas\\Destination.xlsx")
+    synonyms_df = pd.read_excel(r"C:\\Users\\tejas\\WlpStdNames.xlsx")
+    mapping_df = pd.read_excel(r"C:\\Users\\tejas\\elv_mapping.xlsx")
+    logging.info("Excel files loaded successfully.")
+except Exception as e:
+    logging.error(f"Error loading Excel files: {e}")
+    raise e
+
+# Step 1: Data Preparation
+def normalize_string(s):
+    """Normalize the string by removing special characters, converting to lowercase, and trimming."""
+    if pd.isna(s):
+        return ""
+    s = re.sub(r'\W', ' ', str(s)).strip().lower()
+    logging.debug(f"Normalized string: '{s}'")
+    return s
+
+def remove_duplicates(df, subset):
+    """Remove duplicate rows based on specified columns."""
+    before = len(df)
+    df = df.drop_duplicates(subset=subset)
+    after = len(df)
+    logging.info(f"Removed {before - after} duplicates from dataframe.")
+    return df
+
+logging.info("Removing duplicates from source and destination files...")
+source_df = remove_duplicates(source_df, ['Physical Column Description', 'Logical Column Name'])
+destination_df = remove_duplicates(destination_df, ['Column Name', 'Attribute Description'])
+
+logging.info("Normalizing strings in source and destination files...")
+source_df['Logical Column Name'] = source_df['Logical Column Name'].apply(normalize_string)
+destination_df['Attribute Description'] = destination_df['Attribute Description'].apply(normalize_string)
+destination_df['Column Name'] = destination_df['Column Name'].apply(normalize_string)
+
+# Step 2: Apply Synonyms and Abbreviations
+def apply_mappings(text, synonyms_df, mapping_df):
+    """Apply synonyms and mappings to standardize column names."""
+    logging.debug(f"Original text for mapping: '{text}'")
+    for _, row in synonyms_df.iterrows():
+        text = re.sub(fr'\b{normalize_string(row["col_name"])}\b', normalize_string(row["col_short_name"]), text)
+    for _, row in mapping_df.iterrows():
+        text = re.sub(fr'\b{normalize_string(row["col_name"])}\b', normalize_string(row["elv_mapping"]), text)
+    logging.debug(f"Text after applying mappings: '{text}'")
+    return text
+
+logging.info("Applying synonyms and abbreviations...")
+source_df['Logical Column Name'] = source_df['Logical Column Name'].apply(lambda x: apply_mappings(x, synonyms_df, mapping_df))
+destination_df['Attribute Description'] = destination_df['Attribute Description'].apply(lambda x: apply_mappings(x, synonyms_df, mapping_df))
+
+# Step 3: Extract Prefix and Number
+def extract_prefix_number(text):
+    """Extract prefix and number from a string."""
+    match = re.search(r'(.*?)[ _-]?(\d+)[a-z_]*$', text)
+    if match:
+        prefix, number = match.groups()
+        logging.debug(f"Extracted prefix: '{prefix}', number: '{number}' from text: '{text}'")
+        return prefix.strip(), number
+    logging.debug(f"No number found in text: '{text}'")
+    return text.strip(), None
+
+logging.info("Extracting prefixes and numbers from source file...")
+source_df['Prefix'], source_df['Number'] = zip(*source_df['Logical Column Name'].apply(extract_prefix_number))
+
+# Step 4: Fuzzy Matching
+def find_best_match(source, destination):
+    """Find the best match for a source value in the destination list using fuzzy matching."""
+    best_match, best_score = None, 0
+    for dest in destination:
+        score = fuzz.partial_ratio(source, dest)
+        logging.debug(f"Fuzzy matching '{source}' with '{dest}' - Score: {score}")
+        if score > best_score:
+            best_match, best_score = dest, score
+    logging.info(f"Best match for '{source}' is '{best_match}' with score: {best_score}")
+    return best_match, best_score
+
+logging.info("Performing fuzzy matching...")
+results = []
+destination_columns = destination_df['Attribute Description'].tolist() + destination_df['Column Name'].tolist()
+
+for _, row in source_df.iterrows():
+    logical_name = row['Logical Column Name']
+    prefix, number = row['Prefix'], row['Number']
+    logging.info(f"Processing Logical Column Name: '{logical_name}'")
+
+    # Match using number
+    number_matches = [col for col in destination_columns if number and number in col]
+    logging.debug(f"Number matches for '{number}': {number_matches}")
+
+    # If number matches found, refine by prefix
+    if number_matches:
+        best_match, best_score = find_best_match(prefix, number_matches)
+    else:
+        best_match, best_score = find_best_match(logical_name, destination_columns)
+
+    results.append({
+        "Logical Column Name": logical_name,
+        "Best Match": best_match,
+        "Score": best_score
+    })
+
+# Convert results to DataFrame
+results_df = pd.DataFrame(results)
+
+#_________________________________________________________________________________________________________________________________________________________________________________________________________________
+
 import pandas as pd
 from rapidfuzz import process, fuzz
 from difflib import SequenceMatcher

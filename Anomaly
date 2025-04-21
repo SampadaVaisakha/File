@@ -1,0 +1,65 @@
+# pip install lightgbm
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from lightgbm import LGBMRegressor
+
+np.random.seed(42)
+X = np.random.rand(200, 1) * 10
+y = 2 * X.squeeze() + np.random.normal(0, 2, 200)
+y[195:] += 20
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+#Train Quantile Regression Models (50th & 90th) using LightGBM
+model_50 = LGBMRegressor(objective='quantile', alpha=0.5, random_state=42)
+model_90 = LGBMRegressor(objective='quantile', alpha=0.9, random_state=42)
+
+model_50.fit(X_train, y_train)
+model_90.fit(X_train, y_train)
+
+pred_50 = model_50.predict(X_test)
+pred_90 = model_90.predict(X_test)
+
+df = pd.DataFrame({
+    'X': X_test.squeeze(),
+    'Actual': y_test,
+    'Pred_50': pred_50,
+    'Pred_90': pred_90
+})
+
+# df
+
+df['Anomaly_50'] = df['Actual'] > df['Pred_50']
+df['Anomaly_90'] = df['Actual'] > df['Pred_90']
+df['Diff_50'] = df['Actual'] - df['Pred_50']
+df['Diff_90'] = df['Actual'] - df['Pred_90']
+
+an_50 = df[df['Anomaly_50']]
+norm_50 = df[~df['Anomaly_50']]
+an_90 = df[df['Anomaly_90']]
+norm_90 = df[~df['Anomaly_90']]
+
+summary = pd.DataFrame({
+    'Group': ['Anomaly_50', 'Normal_50', 'Anomaly_90', 'Normal_90'],
+    'Mean_Diff': [an_50['Diff_50'].mean(), norm_50['Diff_50'].mean(),
+                  an_90['Diff_90'].mean(), norm_90['Diff_90'].mean()],
+    'Std_Diff': [an_50['Diff_50'].std(), norm_50['Diff_50'].std(),
+                 an_90['Diff_90'].std(), norm_90['Diff_90'].std()],
+    'Count': [len(an_50), len(norm_50), len(an_90), len(norm_90)]
+})
+
+plt.figure(figsize=(10, 6))
+plt.scatter(df['X'], df['Actual'], alpha=0.6, label='Actual')
+plt.plot(df['X'], df['Pred_50'], label='50th Quantile', color='green')
+plt.plot(df['X'], df['Pred_90'], label='90th Quantile', color='orange')
+plt.scatter(an_90['X'], an_90['Actual'], color='red', label='Anomaly > 90th', marker='x', s=100)
+plt.legend()
+plt.grid(True)
+plt.title('Quantile Regression with LightGBM')
+plt.tight_layout()
+plt.show()
+
+summary

@@ -1,4 +1,148 @@
+import json
+# import argparse
+from pathlib import Path
+import pandas as pd
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import sqlite3
+from unsloth import FastLanguageModel
+from utils.region_locator import UserPS
 
+app = Flask(__name__)
+
+CORS(app, origins="*", allow_headers='Content-Type', allow_methods=['GET', 'POST'])
+
+userps = UserPS()
+
+max_seq_length = 2048 # Choose any! We auto support RoPE Scaling internally!
+dtype = None # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
+load_in_4bit = True # Use 4bit quantization to reduce memory usage. Can be False.
+alpaca_prompt = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+### Instruction:
+{instruction}
+
+### Response:
+"""
+
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name = "llama3.1_sql-python",
+    max_seq_length = max_seq_length,
+    dtype = dtype,
+    load_in_4bit = load_in_4bit,
+    # token = "hf_...", # use one if using gated models like meta-llama/Llama-2-7b-hf
+)
+FastLanguageModel.for_inference(model)
+
+def user_ps(location):
+    # print('location:', location)
+    ps_name = userps.location(location)
+    return ps_name
+
+def excel_to_sqlite3(df:pd, conn:sqlite3):
+  ps_info = df.drop(['PS_Latitude', 'PS_Longitude'], axis=1)
+  ps_loc = df[['PS_Name', 'PS_Latitude', 'PS_Longitude']]
+  ps_info.to_sql("PS_Info", conn, if_exists='replace', index=False)
+  ps_loc.to_sql("PS_Loc", conn, if_exists='replace', index=False)
+  return "data inserted to sqlite3"
+
+def get_cursor():
+  if not Path('data/police_data.db').exists():
+    file_path = "data/police_bot.xlsx"
+    df = pd.read_excel(file_path)
+    conn = sqlite3.connect("data/police_data.db")
+    excel_to_sqlite3(df, conn)
+  else:
+    conn = sqlite3.connect('data/police_data.db')
+  return conn, conn.cursor()
+
+def query_sqlite3(query:str):
+  conn, cursor = get_cursor()
+  cursor.execute(query,)
+  rows = cursor.fetchall()
+  column_names = [descrp[0] for descrp in cursor.description]
+  if len(rows) > 0:
+    result = {k:v for k, v in zip(column_names, rows[0])}
+  else:
+    result = {"Casual": 'No information found'}  
+  result_json = json.dumps(result)
+  conn.close()
+  return result_json
+
+def query_sql(query):
+    inputs = tokenizer(
+    [
+        alpaca_prompt.format(
+            instruction=query, # instruction
+            # output - leave this blank for generation!
+        )
+    ], return_tensors = "pt").to("cuda")
+    outputs = model.generate(**inputs, max_new_tokens = 256)
+    response = tokenizer.batch_decode(
+        outputs, skip_special_tokens=True, 
+        clean_up_tokenization_spaces=True)[0].split('Response:\n')[-1].replace("'s", "")
+    return response
+
+def warm_up():
+  warm_up_questions = ['hi', 'Hi', 'who are you?',
+                       'who are you', 'what can you do?',
+                       'who developed you?']
+  for qus in warm_up_questions:
+    query_sql(qus)
+  print('warm up done')
+
+@app.route('/query', methods=['POST'])
+def main():
+  # query from ui with person location coordinates
+  json_data = request.get_json()
+  query = json_data.get('query', '')
+  coordinates = json_data.get('coordinates', '')
+  # coordinates = (17.4366725,78.3643739)
+  if not query:
+    return jsonify({'Casual': 'How can I assist you?'})
+  sql_response_str = query_sql(query)
+  sql_response_updated = sql_response_str.replace(
+      '{my_location}', 'my_location').replace('my_location', user_ps(coordinates))
+  sql_response = eval(sql_response_updated)
+  if sql_response['SQL']:
+    final_response = query_sqlite3(sql_response['SQL'])
+  elif sql_response['Func']:
+    final_response = query_sqlite3(sql_response['Func'])
+  else:
+    final_response = {'Casual': sql_response['Casual']}
+  return final_response
+
+if __name__ == '__main__':
+  warm_up()
+  app.run(host='0.0.0.0', port=5000, debug=False)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 import pandas as pd
